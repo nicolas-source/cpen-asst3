@@ -26,7 +26,8 @@ decryptor = cipher.decryptor()
 decryptor.update(ct) + decryptor.finalize()
 # ^ demo code
 
-
+key = os.urandom(32)
+iv = os.urandom(16)
 
 class Protocol:
     # Initializer (Called from app.py)
@@ -42,6 +43,8 @@ class Protocol:
     # checking if a message is part of protocol and determine which part of the protocol 
     def GetProtocolMessageType(self, message):
         parsed_message = None
+        print("getting protocol message type")
+        print("{} {}".format(type(message), message))
         try:
             parsed_message = json.loads(message)
         except json.JSONDecodeError:
@@ -107,7 +110,6 @@ class Protocol:
 
 
 
-
     # Processing protocol message
     # TODO: IMPLMENET THE LOGIC (CALL SetSessionKey ONCE YOU HAVE THE KEY ESTABLISHED)
     # THROW EXCEPTION IF AUTHENTICATION FAILS
@@ -128,8 +130,8 @@ class Protocol:
             RB =  b64encode(os.urandom(32)).decode('utf-8') + str(time.time())
             # Encrypt user name, RA, DH parameters, and DH public key
             iv = os.urandom(16)
-            print("128")
-            cipher = Cipher(algorithms.AES(shared_secret), modes.CBC(iv))
+            # BUG: shared secret is not a byte string of 128 bits
+            cipher = Cipher(algorithms.AES(os.urandom(16)), modes.CBC(iv))
             encryptor = cipher.encryptor()
             raw = {
                 "username": username,
@@ -137,11 +139,12 @@ class Protocol:
                 "DH_parameters": self.parameters_DH,
                 "DH_public_key": self.public_key
             }
-            print(raw)
+            print("138" + json.dump(raw))
             encryptedMessage = encryptor.update(bytes(json.dump(raw), 'utf-8')) + encryptor.finalize()
             res = {}
             res["RB"] = RB
             res["encrypted"] = encryptedMessage
+            print("returning processed msg")
             return json.dumps(res)
 
         # handles second message in the protocol
@@ -176,11 +179,9 @@ class Protocol:
     # RETURN AN ERROR MESSAGE IF INTEGRITY VERITIFCATION OR AUTHENTICATION FAILS
     def EncryptAndProtectMessage(self, plain_text):
         
-        key = os.urandom(32)
-        iv = os.urandom(16)
-        cipher = Cipher(algorithms.AES(self.session_key), modes.CTR(iv))
+        cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
         encryptor = cipher.encryptor()
-        ct = encryptor.update(bytes(plain_text, 'utf-8')) + encryptor.finalize()
+        cipher_text = encryptor.update(bytes(plain_text, 'utf-8')) + encryptor.finalize()
         
         cipher_text = plain_text
         return cipher_text
@@ -192,7 +193,7 @@ class Protocol:
     def DecryptAndVerifyMessage(self, cipher_text):
         plain_text = cipher_text
 
-        cipher = Cipher(algorithms.AES(self.session), modes.CTR(iv))
+        cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
         decryptor = cipher.decryptor()
         decryptor.update(ct) + decryptor.finalize()
 

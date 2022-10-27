@@ -155,12 +155,14 @@ class Assignment3VPN:
 
                 # Checking if the received message is part of your protocol
                 # TODO: MODIFY THE INPUT ARGUMENTS AND LOGIC IF NECESSARY
+                print("RECEIVER_THREAD: Received message: {}".format(cipher_text))
                 if self.prtcl.IsMessagePartOfProtocol(cipher_text):
                     # Disabling the button to prevent repeated clicks
                     self.secureButton["state"] = "disabled"
                     # Processing the protocol message
                     self._AppendLog("RECEIVER_THREAD: Received protocol message, proceed to process message")
                     res = self.prtcl.ProcessReceivedProtocolMessage(self.username, cipher_text, self.sharedSecret)
+                    print("RECEIVER_THREAD: Processed message: {}".format(res))
 
                 # Otherwise, decrypting and showing the messaage
                 else:
@@ -190,7 +192,7 @@ class Assignment3VPN:
             self._AppendLog("ERR: Init message not generated as string" + init_message)
             return False
         self._AppendLog("Initialization message: " + init_message)
-        self._SendMessage(init_message)
+        self.conn.send((bytes(init_message, 'utf-8')))
 
 
     # Called when SendMessage button is clicked
