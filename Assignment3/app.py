@@ -6,6 +6,7 @@ import pygubu
 import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import messagebox
+import random
 
 # local import from "protocol.py"
 from protocol import Protocol
@@ -52,7 +53,12 @@ class Assignment3VPN:
         
         # Creating a protocol object
         self.prtcl = Protocol()
-     
+
+        # User info
+        self.username = str(random.randint(1000, 9999)) # assume that names don't repeat
+        self.personalDHExponent = None
+        self.sessionKey = None
+        
     # Distructor     
     def __del__(self):
         # Closing the network socket
@@ -108,6 +114,7 @@ class Assignment3VPN:
                 self._AppendLog("CLIENT: Connection established successfully. You can now send/receive messages.")
             else:
                 self._AppendLog("CONNECTION: Initiating server mode...")
+                self._AppendLog("Randomly generated server user name is " + self.username)
                 self.s.bind((self.hostName.get(), int(self.port.get())))
                 self.s.listen(1)
                 self.server_thread.start()
@@ -179,7 +186,11 @@ class Assignment3VPN:
         self.secureButton["state"] = "disabled"
 
         # TODO: THIS IS WHERE YOU SHOULD IMPLEMENT THE START OF YOUR MUTUAL AUTHENTICATION AND KEY ESTABLISHMENT PROTOCOL, MODIFY AS YOU SEEM FIT
-        init_message = self.prtcl.GetProtocolInitiationMessage()
+        init_message = self.prtcl.GetProtocolInitiationMessage(self.username)
+        if (type(init_message) != str):
+            self._AppendLog("ERR: Init message not generated as string" + init_message)
+            return False
+        self._AppendLog("Initialization message: " + init_message)
         self._SendMessage(init_message)
 
 
