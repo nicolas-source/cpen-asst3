@@ -56,9 +56,7 @@ class Assignment3VPN:
 
         # User info
         self.username = str(random.randint(1000, 9999)) # assume that names don't repeat
-        self.personalDHExponent = None
-        self.sessionKey = None
-        
+
     # Distructor     
     def __del__(self):
         # Closing the network socket
@@ -161,7 +159,8 @@ class Assignment3VPN:
                     # Disabling the button to prevent repeated clicks
                     self.secureButton["state"] = "disabled"
                     # Processing the protocol message
-                    self.prtcl.ProcessReceivedProtocolMessage(cipher_text)
+                    self._AppendLog("RECEIVER_THREAD: Received protocol message, proceed to process message")
+                    res = self.prtcl.ProcessReceivedProtocolMessage(self.username, cipher_text, self.sharedSecret)
 
                 # Otherwise, decrypting and showing the messaage
                 else:
