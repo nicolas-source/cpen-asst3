@@ -130,8 +130,17 @@ class Protocol:
             RB =  b64encode(os.urandom(32)).decode('utf-8') + str(time.time())
             # Encrypt user name, RA, DH parameters, and DH public key
             iv = os.urandom(16)
-            # BUG: shared secret is not a byte string of 128 bits
-            cipher = Cipher(algorithms.AES(os.urandom(16)), modes.CBC(iv))
+            sharedSecretAsBytes = bytes(shared_secret.get(), 'utf-8')
+            # IMPORTANT NOTE: Pad with zeros or trim the shared secret key string to be 16 character long
+            # so that with utf-8 encoding it will become a 16 byte long key for AES
+            shared_secret_16_char = None
+            if len(shared_secret.get()) > 16:
+                shared_secret_16_char = shared_secret.get()[0:16]
+            else:
+                shared_secret_16_char = shared_secret.get().zfill(16)
+            print(shared_secret_16_char)
+            print(len(bytes(shared_secret_16_char, 'utf-8')))
+            cipher = Cipher(algorithms.AES(bytes(shared_secret_16_char, 'utf-8')), modes.CBC(iv))
             encryptor = cipher.encryptor()
             raw = {
                 "username": username,
@@ -139,8 +148,12 @@ class Protocol:
                 "DH_parameters": self.parameters_DH,
                 "DH_public_key": self.public_key
             }
-            print("138" + json.dump(raw))
-            encryptedMessage = encryptor.update(bytes(json.dump(raw), 'utf-8')) + encryptor.finalize()
+            print(raw)
+            print(str(self.parameters_DH))
+            print(str(vars(self.parameters_DH)))
+            print(str(self.public_key))
+            print(str(vars(self.public_key)))
+            encryptedMessage = encryptor.update(bytes(json.dumps(raw), 'utf-8')) + encryptor.finalize()
             res = {}
             res["RB"] = RB
             res["encrypted"] = encryptedMessage
