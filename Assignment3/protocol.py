@@ -13,6 +13,7 @@ from base64 import b64encode
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+import cryptography.hazmat.primitives.serialization as serialization
 
 # cryptography modules for AES
 # https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/
@@ -36,6 +37,7 @@ class Protocol:
         self.parameters_DH = None
         self.private_key = None
         self.public_key = None
+        self.public_key_serialized = None
         self.session_key = None
         pass
 
@@ -87,9 +89,12 @@ class Protocol:
     # Contactor: Creates SHARED KEY from own PRIVATE KEY and Contactee's PUBLIC KEY
 
     def Exchange_DH_Generate_Keys_B(self):
-        self.parameters_DH = dh.generate_parameters(generator=2, key_size=512)
-        self.private_key = self.parameters_DH.generate_private_key()
+        # serializing the DH parameters to bytes for sending across the internet 
+        parameters_DH = dh.generate_parameters(generator=2, key_size=512)
+        self.parameters_DH = parameters_DH.parameter_bytes(serialization.Encoding.PEM, serialization.ParameterFormat.PKCS3).decode('utf-8')
+        self.private_key = parameters_DH.generate_private_key()
         self.public_key = self.private_key.public_key()
+        self.public_key_serialized = self.public_key.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode('utf-8')
     
     def Exchange_DH_Send_Components_B(self):
         return self.parameters_DH, self.public_key
@@ -101,7 +106,7 @@ class Protocol:
     # Contactee: RECEIVES PARAMETERS then generates PRIVATE & PUBLIC KEY PAIR
     # Contactee: Creates SHARED KEY from own PRIVATE KEY and Contactor's PUBLIC KEY
     def Exchange_DH_Generate_Keys_A(self, parameters_DH):
-        self.parameters_DH = parameters_DH
+        self.parameters_DH = serialization.load_pem_parameters(parameters_DH)
         self.private_key = self.parameters_DH.generate_private_key()
         self.public_key = self.private_key.public_key()
     
@@ -146,17 +151,12 @@ class Protocol:
                 "username": username,
                 "RA": parsed_message["RA"],
                 "DH_parameters": self.parameters_DH,
-                "DH_public_key": self.public_key
+                "DH_public_key": self.public_key_serialized
             }
-            print(raw)
-            print(str(self.parameters_DH))
-            print(str(vars(self.parameters_DH)))
-            print(str(self.public_key))
-            print(str(vars(self.public_key)))
             encryptedMessage = encryptor.update(bytes(json.dumps(raw), 'utf-8')) + encryptor.finalize()
             res = {}
             res["RB"] = RB
-            res["encrypted"] = encryptedMessage
+            res["encrypted"] = encryptedMessage.decode('utf-8')
             print("returning processed msg")
             return json.dumps(res)
 
