@@ -20,7 +20,7 @@ import cryptography.hazmat.primitives.serialization as serialization
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 key = os.urandom(32)
 iv = os.urandom(16)
-cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
 encryptor = cipher.encryptor()
 ct = encryptor.update(b"a secret message") + encryptor.finalize()
 decryptor = cipher.decryptor()
@@ -80,8 +80,7 @@ class Protocol:
     def IsMessagePartOfProtocol(self, message):
         # assume users don't send regular messages in the format of the protocol
         # because if it is recognized as part of the protocol, it will be processed
-        print("checking if part of protocol")
-        print(self.GetProtocolMessageType(message))
+        print("checking if message is part of protocol")
         return self.GetProtocolMessageType(message) in [1,2,3]
 
 
@@ -119,23 +118,23 @@ class Protocol:
     # TODO: IMPLMENET THE LOGIC (CALL SetSessionKey ONCE YOU HAVE THE KEY ESTABLISHED)
     # THROW EXCEPTION IF AUTHENTICATION FAILS
     def ProcessReceivedProtocolMessage(self, username, message, shared_secret):
-        print("Processing message")
+        print("Processing protocol message")
         protocolMessageType = self.GetProtocolMessageType(message)
         parsed_message = None
         try:
             parsed_message = json.loads(message)
         except json.JSONDecodeError:
             return -1
-        print("Parsed message: ", parsed_message)
+        print("Parsed protocol message: ", parsed_message)
         # handles first message in the protocol
         if (protocolMessageType == 1):
             parsed_message = json.loads(message)
+            # generate DH key pairs
             self.Exchange_DH_Generate_Keys_B()
             # Challenge
             RB =  b64encode(os.urandom(32)).decode('utf-8') + str(time.time())
             # Encrypt user name, RA, DH parameters, and DH public key
             iv = os.urandom(16)
-            sharedSecretAsBytes = bytes(shared_secret.get(), 'utf-8')
             # IMPORTANT NOTE: Pad with zeros or trim the shared secret key string to be 16 character long
             # so that with utf-8 encoding it will become a 16 byte long key for AES
             shared_secret_16_char = None
@@ -143,9 +142,7 @@ class Protocol:
                 shared_secret_16_char = shared_secret.get()[0:16]
             else:
                 shared_secret_16_char = shared_secret.get().zfill(16)
-            print(shared_secret_16_char)
-            print(len(bytes(shared_secret_16_char, 'utf-8')))
-            cipher = Cipher(algorithms.AES(bytes(shared_secret_16_char, 'utf-8')), modes.CBC(iv))
+            cipher = Cipher(algorithms.AES(bytes(shared_secret_16_char, 'utf-8')), modes.CTR(iv))
             encryptor = cipher.encryptor()
             raw = {
                 "username": username,
@@ -156,8 +153,8 @@ class Protocol:
             encryptedMessage = encryptor.update(bytes(json.dumps(raw), 'utf-8')) + encryptor.finalize()
             res = {}
             res["RB"] = RB
-            res["encrypted"] = encryptedMessage.decode('utf-8')
-            print("returning processed msg")
+            res["encrypted"] = str(encryptedMessage)
+            print("generates the second message in the protocol")
             return json.dumps(res)
 
         # handles second message in the protocol
