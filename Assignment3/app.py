@@ -163,7 +163,7 @@ class Assignment3VPN:
                     self._AppendLog("RECEIVER_THREAD: Received protocol message, proceed to process message")
                     res = self.prtcl.ProcessReceivedProtocolMessage(self.username, cipher_text, self.sharedSecret)
                     if res != None:
-                      print("RECEIVER_THREAD: Processed message: {}".format(res))
+                      print("Processed message: {}".format(res))
                       self.conn.send(bytes(res, 'utf-8'))
 
 
@@ -194,7 +194,7 @@ class Assignment3VPN:
         if (type(init_message) != str):
             self._AppendLog("ERR: Init message not generated as string" + init_message)
             return False
-        self._AppendLog("Initialization message: " + init_message)
+        self._AppendLog("Sending initialization message: " + init_message)
         self.conn.send((bytes(init_message, 'utf-8')))
 
 

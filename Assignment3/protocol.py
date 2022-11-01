@@ -6,7 +6,7 @@ import random
 # module for random num gen
 # https://cryptography.io/en/latest/random-numbers/
 import os
-from base64 import b64encode
+from base64 import b64encode, b64decode
 
 # cryptography modules for EDH
 # https://cryptography.io/en/latest/hazmat/primitives/asymmetric/dh/
@@ -48,23 +48,29 @@ class Protocol:
     # checking if a message is part of protocol and determine which part of the protocol 
     def GetProtocolMessageType(self, message):
         parsed_message = None
+        print("=====================================")
         print("getting protocol message type")
         print("{} {}".format(type(message), message))
         try:
             parsed_message = json.loads(message)
+            print("parsed : " + str(parsed_message))
         except json.JSONDecodeError:
+            print("not json")
             return -1
-        
+
         # First message sent from A to B is the username and RA
-        if (parsed_message["username"] is not None and parsed_message["RA"] is not None):            
+        if ("username" in parsed_message and parsed_message["RA"] is not None):            
+            print("message type 1")
             return 1
 
         # Second message is RB and {B's username, RA, g, p, g^b mod p}Kab
-        if (parsed_message["RB"] is not None and parsed_message["encrypted"] is not None):
+        if ("RB" in parsed_message and parsed_message["encrypted"] is not None):
+            print("message type 2")
             return 2
         
         # Third message is {A's username, RB, g^a mod p}Kab
-        if (parsed_message["encrypted"] is not None):
+        if ("encrypted" in parsed_message):
+            print("message type 3")
             return 3
 
     # Creating the initial message of your protocol (to be send to the other party to bootstrap the protocol)
@@ -84,7 +90,6 @@ class Protocol:
     def IsMessagePartOfProtocol(self, message):
         # assume users don't send regular messages in the format of the protocol
         # because if it is recognized as part of the protocol, it will be processed
-        print("checking if message is part of protocol")
         return self.GetProtocolMessageType(message) in [1,2,3]
 
 
@@ -106,10 +111,15 @@ class Protocol:
     # Contactee: RECEIVES PARAMETERS then generates PRIVATE & PUBLIC KEY PAIR
     # Contactee: Creates SHARED KEY from own PRIVATE KEY and Contactor's PUBLIC KEY
     def Exchange_DH_Generate_Keys_A(self, parameters_DH):
+        print("114")
         self.parameters_DH = serialization.load_pem_parameters(parameters_DH)
+        print("115")
         self.private_key = self.parameters_DH.generate_private_key()
+        print("117")
         self.public_key = self.private_key.public_key()
+        print("119")
         self.public_key_serialized = self.public_key.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode('utf-8')
+        print("121")
     
     def Exchange_DH_compute_shared_key_A(self, other_public_key):
         self.shared_key = self.private_key.exchange(other_public_key)
@@ -120,14 +130,23 @@ class Protocol:
     # TODO: IMPLMENET THE LOGIC (CALL SetSessionKey ONCE YOU HAVE THE KEY ESTABLISHED)
     # THROW EXCEPTION IF AUTHENTICATION FAILS
     def ProcessReceivedProtocolMessage(self, username, message, shared_secret):
-        print("Processing protocol message")
         protocolMessageType = self.GetProtocolMessageType(message)
+        print("Processing protocol message type " + str(protocolMessageType))
+        
         parsed_message = None
         try:
             parsed_message = json.loads(message)
         except json.JSONDecodeError:
             return -1
         print("Parsed protocol message: ", parsed_message)
+
+        # generates fixed size shared secret key
+        shared_secret_16_char = None
+        if len(shared_secret.get()) > 16:
+            shared_secret_16_char = shared_secret.get()[0:16]
+        else:
+            shared_secret_16_char = shared_secret.get().zfill(16)
+        
         # handles first message in the protocol
         if (protocolMessageType == 1 and self.secure_state == 0):
             self.secure_state = 2
@@ -140,11 +159,6 @@ class Protocol:
             iv = os.urandom(16) # TODO do we need to send the IV 
             # IMPORTANT NOTE: Pad with zeros or trim the shared secret key string to be 16 character long
             # so that with utf-8 encoding it will become a 16 byte long key for AES
-            shared_secret_16_char = None
-            if len(shared_secret.get()) > 16:
-                shared_secret_16_char = shared_secret.get()[0:16]
-            else:
-                shared_secret_16_char = shared_secret.get().zfill(16)
             cipher = Cipher(algorithms.AES(bytes(shared_secret_16_char, 'utf-8')), modes.CTR(iv))
             encryptor = cipher.encryptor()
             raw = {
@@ -156,34 +170,38 @@ class Protocol:
             encryptedMessage = encryptor.update(bytes(json.dumps(raw), 'utf-8')) + encryptor.finalize()
             res = {}
             res["RB"] = self.RB
-            res["encrypted"] = str(encryptedMessage)
-            print("generates the second message in the protocol")
+            res["encrypted"] = b64encode(encryptedMessage).decode('utf-8')
+            res["iv"] = b64encode(iv).decode('utf-8')
             return json.dumps(res)
 
         # handles second message in the protocol
         elif (protocolMessageType == 2 and self.secure_state == 1):
             parsed_message = json.loads(message)
-            plainMessage = parsed_message['encrypted']
+            cipher_text = b64decode(bytes(parsed_message['encrypted'], 'utf-8'))
+            iv = b64decode(bytes(parsed_message['iv'], 'utf-8'))
 
             # decrypt the encrypted part of the message
             cipher = Cipher(algorithms.AES(bytes(shared_secret_16_char, 'utf-8')), modes.CTR(iv))
             decryptor = cipher.decryptor()
-            decryptor.update(bytes(plainMessage, 'utf-8')) + decryptor.finalize()
-            raw = json.loads(plainMessage)
-
+            decrypted = decryptor.update(cipher_text) + decryptor.finalize()
+            raw = json.loads(decrypted)
+            
             # verify RA was sent back correctly
             if raw['RA'] != self.RA:
-              # TODO is returning here correct?
               return {
                 "error": "Incorrect RA value, closing down secure connection"
               }
             self.secure_state = 3
             # get the DH parameters and compute shared key
+            print(str(raw['DH_parameters']))
             self.Exchange_DH_Generate_Keys_A(raw['DH_parameters'])
+            print("195")
             self.Exchange_DH_compute_shared_key_A(raw['DH_public_key'])
+            print("197")
 
             # set the session key
-            self.SetSessionKey(self.shared_key)   
+            self.SetSessionKey(self.shared_key)  
+            print("201") 
 
             # generates the third message
             print("generates the third message in the protocol")
