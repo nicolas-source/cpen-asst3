@@ -47,6 +47,7 @@ class Protocol:
     # Helper functions
     # checking if a message is part of protocol and determine which part of the protocol 
     def GetProtocolMessageType(self, message):
+        # TODO: check for "iv"
         parsed_message = None
         print("=====================================")
         print("getting protocol message type")
@@ -99,32 +100,22 @@ class Protocol:
     def Exchange_DH_Generate_Keys_B(self):
         # serializing the DH parameters to bytes for sending across the internet 
         parameters_DH = dh.generate_parameters(generator=2, key_size=512)
-        self.parameters_DH = parameters_DH.parameter_bytes(serialization.Encoding.PEM, serialization.ParameterFormat.PKCS3).decode('utf-8')
+        self.parameters_DH = b64encode(parameters_DH.parameter_bytes(serialization.Encoding.PEM, serialization.ParameterFormat.PKCS3)).decode('utf-8')
         self.private_key = parameters_DH.generate_private_key()
         self.public_key = self.private_key.public_key()
-        self.public_key_serialized = self.public_key.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode('utf-8')
+        self.public_key_serialized = b64encode(self.public_key.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)).decode('utf-8')
 
-    def Exchange_DH_compute_shared_key_B(self, other_public_key):
-        self.shared_key = self.private_key.exchange(other_public_key)
+    def Exchange_DH_compute_shared_key(self, other_public_key):
+        self.shared_key = self.private_key.exchange(serialization.load_pem_public_key(b64decode(bytes(other_public_key, 'utf-8'))))
 
 
     # Contactee: RECEIVES PARAMETERS then generates PRIVATE & PUBLIC KEY PAIR
     # Contactee: Creates SHARED KEY from own PRIVATE KEY and Contactor's PUBLIC KEY
     def Exchange_DH_Generate_Keys_A(self, parameters_DH):
-        print("114")
-        self.parameters_DH = serialization.load_pem_parameters(parameters_DH)
-        print("115")
+        self.parameters_DH = serialization.load_pem_parameters(b64decode(bytes(parameters_DH, 'utf-8')))
         self.private_key = self.parameters_DH.generate_private_key()
-        print("117")
         self.public_key = self.private_key.public_key()
-        print("119")
-        self.public_key_serialized = self.public_key.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode('utf-8')
-        print("121")
-    
-    def Exchange_DH_compute_shared_key_A(self, other_public_key):
-        self.shared_key = self.private_key.exchange(other_public_key)
-
-
+        self.public_key_serialized = b64encode(self.public_key.public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)).decode('utf-8')
 
     # Processing protocol message
     # TODO: IMPLMENET THE LOGIC (CALL SetSessionKey ONCE YOU HAVE THE KEY ESTABLISHED)
@@ -156,7 +147,7 @@ class Protocol:
             # Challenge
             self.RB =  b64encode(os.urandom(32)).decode('utf-8') + str(time.time())
             # Encrypt user name, RA, DH parameters, and DH public key
-            iv = os.urandom(16) # TODO do we need to send the IV 
+            iv = os.urandom(16)
             # IMPORTANT NOTE: Pad with zeros or trim the shared secret key string to be 16 character long
             # so that with utf-8 encoding it will become a 16 byte long key for AES
             cipher = Cipher(algorithms.AES(bytes(shared_secret_16_char, 'utf-8')), modes.CTR(iv))
@@ -195,13 +186,10 @@ class Protocol:
             # get the DH parameters and compute shared key
             print(str(raw['DH_parameters']))
             self.Exchange_DH_Generate_Keys_A(raw['DH_parameters'])
-            print("195")
-            self.Exchange_DH_compute_shared_key_A(raw['DH_public_key'])
-            print("197")
+            self.Exchange_DH_compute_shared_key(raw['DH_public_key'])
 
             # set the session key
             self.SetSessionKey(self.shared_key)  
-            print("201") 
 
             # generates the third message
             print("generates the third message in the protocol")
@@ -210,34 +198,41 @@ class Protocol:
                 "RB": parsed_message["RB"],
                 "DH_public_key": self.public_key_serialized
             }
+            new_iv = os.urandom(16)
+            new_cipher = Cipher(algorithms.AES(bytes(shared_secret_16_char, 'utf-8')), modes.CTR(new_iv))
+            encryptor = new_cipher.encryptor()
             encryptedMessage = encryptor.update(bytes(json.dumps(raw), 'utf-8')) + encryptor.finalize()
             res = {}
-            res["encrypted"] = str(encryptedMessage)
+            res["encrypted"] = b64encode(encryptedMessage).decode('utf-8')
+            res["iv"] = b64encode(new_iv).decode('utf-8')
             return json.dumps(res)
 
         # handles third message in the protocol
         elif (protocolMessageType == 3 and self.secure_state == 2):
             parsed_message = json.loads(message)
-            plainMessage = parsed_message['encrypted']
+            cipher_text = b64decode(bytes(parsed_message['encrypted'], 'utf-8'))
+            iv = b64decode(bytes(parsed_message['iv'], 'utf-8'))
 
+            print("216")
             # decrypt the encrypted part of the message
             cipher = Cipher(algorithms.AES(bytes(shared_secret_16_char, 'utf-8')), modes.CTR(iv))
             decryptor = cipher.decryptor()
-            decryptor.update(bytes(plainMessage, 'utf-8')) + decryptor.finalize()
-            raw = json.loads(plainMessage)
+            print("220")
+            plain_text = decryptor.update(cipher_text) + decryptor.finalize()
+            raw = json.loads(plain_text)
+            print("223")
 
              # verify RB was sent back correctly
             if raw['RB'] != self.RB:
-              # TODO is returning here correct?
               return {
                 "error": "Incorrect RB value, closing down secure connection"
               }
-
+            print("230")
             # computes shared key
-            self.Exchange_DH_compute_shared_key_B(raw['DH_public_key'])
+            self.Exchange_DH_compute_shared_key(raw['DH_public_key'])
             print('secure channel established')       
             self.SetSessionKey(self.shared_key)    
-            print('session key computed')
+            print('session key computed ' + str(self.session_key))
             return None
 
         else:
@@ -261,8 +256,10 @@ class Protocol:
     # TODO: IMPLEMENT ENCRYPTION WITH THE SESSION KEY (ALSO INCLUDE ANY NECESSARY INFO IN THE ENCRYPTED MESSAGE FOR INTEGRITY PROTECTION)
     # RETURN AN ERROR MESSAGE IF INTEGRITY VERITIFCATION OR AUTHENTICATION FAILS
     def EncryptAndProtectMessage(self, plain_text):
-        # TODO: what key do we use to compute HMAC?
-        cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
+        # TODO: what key do we use to compute HMAC
+        # TODO: need to initialize or dynamically generate IV
+        print("encrypt message")
+        cipher = Cipher(algorithms.AES(self.session_key), modes.CTR(iv))
         encryptor = cipher.encryptor()
         cipher_text = encryptor.update(bytes(plain_text, 'utf-8')) + encryptor.finalize()
         
@@ -274,6 +271,7 @@ class Protocol:
     # TODO: IMPLEMENT DECRYPTION AND INTEGRITY CHECK WITH THE SESSION KEY
     # RETURN AN ERROR MESSAGE IF INTEGRITY VERITIFCATION OR AUTHENTICATION FAILS
     def DecryptAndVerifyMessage(self, cipher_text):
+        print("decrypt message")
         plain_text = cipher_text
 
         cipher = Cipher(algorithms.AES(self.session_key), modes.CTR(iv))
