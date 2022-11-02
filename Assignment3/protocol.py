@@ -31,7 +31,8 @@ class Protocol:
         self.RA = None
         self.RB = None
         self.secure_state = 0 # state corresponds to which message to send in the secure protocol
-        self.iv = os.urandom(16) # TODO delete this
+        # self.iv = os.urandom(16) # TODO delete this
+        self.iv = b'\xceT\xcc\xcbm\xf7\x9b\xa1\xb7\x12\x028\xc1{Hy'
         pass
 
     # Helper functions
@@ -247,9 +248,12 @@ class Protocol:
     # Encrypting messages
     # TODO: IMPLEMENT ENCRYPTION WITH THE SESSION KEY (ALSO INCLUDE ANY NECESSARY INFO IN THE ENCRYPTED MESSAGE FOR INTEGRITY PROTECTION)
     # RETURN AN ERROR MESSAGE IF INTEGRITY VERITIFCATION OR AUTHENTICATION FAILS
+    # input: plain_text: string
+    # return: string
     def EncryptAndProtectMessage(self, plain_text):
       if self.session_key is None:
         cipher_text = plain_text
+        return cipher_text
       else:
         print(str(type(plain_text))  + " type of plaintext en")
         # TODO: what key do we use to compute HMAC
@@ -261,6 +265,8 @@ class Protocol:
         cipher_text = encryptor.update(bytes(plain_text, 'utf-8')) + encryptor.finalize()
         print("send encrypted bytes")
         print(str(type(cipher_text)) + " type of cipher_text en")
+        print(self.session_key)
+        print(self.iv)
 
         return b64encode(cipher_text).decode('utf-8')
 
@@ -268,21 +274,23 @@ class Protocol:
     # Decrypting and verifying messages
     # TODO: IMPLEMENT DECRYPTION AND INTEGRITY CHECK WITH THE SESSION KEY
     # RETURN AN ERROR MESSAGE IF INTEGRITY VERITIFCATION OR AUTHENTICATION FAILS
-    # cipher_text: byte
+    # input: cipher_text: byte
     # return: byte
     def DecryptAndVerifyMessage(self, cipher_text):
       if self.session_key is None:
         # return plain_text_byte
         plain_text = cipher_text
+        return plain_text
       else:
         print(str(type(cipher_text)) + " type of cipher_text de")
         print("decrypt message")
         # iv = None # TODO figure out what iv we are using here
-
+        print(self.session_key)
+        print(self.iv)
         cipher = Cipher(algorithms.AES(self.session_key), modes.CTR(self.iv))
         decryptor = cipher.decryptor()
         print("274")
-        plain_text = decryptor.update(b64decode(cipher_text)) + decryptor.finalize()
+        plain_text = decryptor.update(b64decode(cipher_text.decode().encode("utf-8"))) + decryptor.finalize()
         print(str(type(plain_text)) + " type of plaintext de")
         print("decryted")
         return plain_text
