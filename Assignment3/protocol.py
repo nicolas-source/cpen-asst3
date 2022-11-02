@@ -18,17 +18,6 @@ import cryptography.hazmat.primitives.serialization as serialization
 # cryptography modules for AES
 # https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-key = os.urandom(32)
-iv = os.urandom(16)
-cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
-encryptor = cipher.encryptor()
-ct = encryptor.update(b"a secret message") + encryptor.finalize()
-decryptor = cipher.decryptor()
-decryptor.update(ct) + decryptor.finalize()
-# ^ demo code
-
-key = os.urandom(32)
-iv = os.urandom(16)
 
 class Protocol:
     # Initializer (Called from app.py)
@@ -259,6 +248,7 @@ class Protocol:
         # TODO: what key do we use to compute HMAC
         # TODO: need to initialize or dynamically generate IV
         print("encrypt message")
+        iv = None # TODO figure out what iv we are using here
         cipher = Cipher(algorithms.AES(self.session_key), modes.CTR(iv))
         encryptor = cipher.encryptor()
         cipher_text = encryptor.update(bytes(plain_text, 'utf-8')) + encryptor.finalize()
@@ -273,6 +263,7 @@ class Protocol:
     def DecryptAndVerifyMessage(self, cipher_text):
         print("decrypt message")
         plain_text = cipher_text
+        iv = None # TODO figure out what iv we are using here
 
         cipher = Cipher(algorithms.AES(self.session_key), modes.CTR(iv))
         decryptor = cipher.decryptor()
