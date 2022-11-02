@@ -96,6 +96,7 @@ class Protocol:
 
     def Exchange_DH_compute_shared_key(self, other_public_key):
         self.shared_key = self.private_key.exchange(serialization.load_pem_public_key(b64decode(bytes(other_public_key, 'utf-8'))))
+        self.private_key = None # forget about our exponent
 
 
     # Contactee: RECEIVES PARAMETERS then generates PRIVATE & PUBLIC KEY PAIR
